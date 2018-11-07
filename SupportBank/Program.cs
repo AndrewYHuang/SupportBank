@@ -48,7 +48,7 @@ namespace SupportBank
         private string FileLocation;
         private string[] FileLines;
 
-        FileLoad(string fileLocation)
+        public FileLoad(string fileLocation)
         {
             FileLocation = fileLocation;
             FileLines = System.IO.File.ReadAllLines(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
