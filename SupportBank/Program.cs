@@ -4,37 +4,52 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
+using NLog;
+using NLog.Config;
+using NLog.Targets;
+
 namespace SupportBank
 {
     class Program
     {
         static void Main(string[] args)
         {
-            FileLoad csvFile = new FileLoad(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
-            TransactionLog transactions = csvFile.GenerateTransactionLog();
-            var accounts = transactions.CreateAccounts();
+            var config = new LoggingConfiguration();
+            var target = new FileTarget { FileName = @"C:\Work\Logs\SupportBank.log", Layout = @"${longdate} ${level} - ${logger}: ${message}" };
+            config.AddTarget("File Logger", target);
+            config.LoggingRules.Add(new LoggingRule("*", LogLevel.Debug, target));
+            LogManager.Configuration = config;
 
+            var logger = NLog.LogManager.GetCurrentClassLogger();
+            logger.Info("Program Started");
+
+            FileLoad csvFile = new FileLoad(@"C:\Users\AYH\Documents\Transactions2014.csv");
+            var transactions = csvFile.GenerateTransactionLog();
+            var accounts = AccountFactory.CreateAccounts(transactions);
+
+            
             while (true)
             {
-                string input = Console.ReadLine();
-                if (input == "quit") return;
-
-                if (input.StartsWith("list "))
+                var option = ConsoleInterface.UserMainPrompt(out var name);
+                switch (option)
                 {
-                    input = input.Remove(0, 5);
-                    if (input == "all")
+                    case 'q':
+                        return;
+                    case 'l':
                     {
-                        foreach (Account account in accounts)
-                        {
-                            Console.WriteLine(account);
-                        }
-                        
+                        ConsoleInterface.ListAccounts(accounts);
+                        break;
+                    }
+                    case 'a':
+                    {
+                        ConsoleInterface.ListAccountTransactions(transactions, name);
+                        break;
+                    }
+                    default:
+                    {
+                        break;
                     }
 
-                    else
-                    {
-                        transactions.ListAccount(input);
-                    }
                 }
 
             } 
@@ -45,24 +60,25 @@ namespace SupportBank
 
     class FileLoad
     {
-        private string FileLocation;
+
+        private string _fileLocation;
         private string[] FileLines;
 
         public FileLoad(string fileLocation)
         {
-            FileLocation = fileLocation;
-            FileLines = System.IO.File.ReadAllLines(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
+            _fileLocation = fileLocation;
+            FileLines = System.IO.File.ReadAllLines(fileLocation);
         }
 
-        public TransactionLog GenerateTransactionLog()
+        public List<Transaction> GenerateTransactionLog()
         {
-            TransactionLog transactions = new TransactionLog();
+            List<Transaction> transactions = new List<Transaction>();
             foreach (string line in FileLines.Skip(1))
             {
                 var entries = line.Split(',');
                 DateTime date = DateTime.Parse(entries[0]);
                 double value = double.Parse(entries[4]);
-                transactions.AddTransaction(new Transaction(date, entries[1], entries[2], entries[3], value));
+                transactions.Add(new Transaction(date, entries[1], entries[2], entries[3], value));
             }
 
             return transactions;
@@ -81,25 +97,33 @@ namespace SupportBank
 
         public override string ToString() => $"{Name}, {Credit}";
     }
-
-    class TransactionLog
+    class Transaction
     {
-        private List<Transaction> _transactionList;
+        public DateTime Date;
+        public string From;
+        public string To;
+        public string Narrative;
+        public double Amount;
 
-        public TransactionLog()
+        public Transaction(DateTime date, string from, string to, string narrative, double amount)
         {
-            _transactionList = new List<Transaction>();
+            Date = date;
+            From = from;
+            To = to;
+            Narrative = narrative;
+            Amount = amount;
         }
 
-        public void AddTransaction(Transaction transaction) => _transactionList.Add(transaction);
-
-
-        public List<Account> CreateAccounts()
+        public override string ToString() => $"{Date.ToShortDateString()}, {From}, {To}, {Narrative}, {Amount}";
+    }
+    static class AccountFactory
+    {
+        public static List<Account> CreateAccounts(IEnumerable<Transaction> transactionList)
         {
             var accounts = new List<Account>();
 
             // Go through the transaction list
-            foreach (Transaction transaction in _transactionList)
+            foreach (Transaction transaction in transactionList)
             {
                 // Calculate credit deducted from senders
                 var accountFound = false;
@@ -139,33 +163,45 @@ namespace SupportBank
             }
             return accounts;
         }
-
-        public void ListAccount(string name)
+    }
+    static class ConsoleInterface
+    {
+        public static void ListAccounts(List<Account> accounts)
         {
-            foreach (Transaction transaction in _transactionList)
+            foreach (Account account in accounts)
+            {
+                Console.WriteLine(account);
+            }
+        }
+        public static void ListAccountTransactions(List<Transaction> transactionList,string name)
+        {
+            foreach (Transaction transaction in transactionList)
                 if (transaction.From == name || transaction.To == name)
                     Console.WriteLine(transaction);
             
         }
-    }
 
-    class Transaction
-    {
-        public DateTime Date;
-        public string From;
-        public string To;
-        public string Narrative;
-        public double Amount;
-
-        public Transaction(DateTime date, string from, string to, string narrative, double amount)
+        public static char UserMainPrompt(out string name)
         {
-            Date = date;
-            From = from;
-            To = to;
-            Narrative = narrative;
-            Amount = amount;
-        }
+            while (true)
+            {
+                name = "";
+                string input = Console.ReadLine();
 
-        public override string ToString() => $"{Date.ToShortDateString()}, {From}, {To}, {Narrative}, {Amount}";
+                if (input == "q" || input == "quit" || input == "exit") return 'q';
+
+                if (input.StartsWith("list "))
+                {
+                    input = input.Remove(0, 5);
+
+                    if (input == "all") // "list all"
+                        return 'l';
+
+                    name = input; // otherwise it's "list [name]"
+                    return 'a';
+                }
+            }
+
+        }
     }
 }
