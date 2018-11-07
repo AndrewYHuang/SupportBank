@@ -10,23 +10,65 @@ namespace SupportBank
     {
         static void Main(string[] args)
         {
-            var pathToFile = @"C:\Users\AYH\Documents\Transactions2014.csv";
-            var fileLines = System.IO.File.ReadAllLines(pathToFile);
-            var transactions = new TransactionLog();
-            foreach (string line in fileLines.Skip(1))
+            FileLoad csvFile = new FileLoad(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
+            TransactionLog transactions = csvFile.GenerateTransactionLog();
+            var accounts = transactions.CreateAccounts();
+
+            while (true)
             {
-                var entries = line.Split(',');
-                transactions.AddTransaction(new Transaction(DateTime.Parse(entries[0]), entries[1], entries[2], entries[3], double.Parse(entries[4])));
-            }
-            transactions.ListAllTransactions();
-            transactions.ListAccount("Gergana I");
-            Console.WriteLine("Press any key to exit.");
-            System.Console.ReadKey();
+                string input = Console.ReadLine();
+                if (input == "quit") return;
+
+                if (input.StartsWith("list "))
+                {
+                    input = input.Remove(0, 5);
+                    if (input == "all")
+                    {
+                        foreach (Account account in accounts)
+                        {
+                            Console.WriteLine(account);
+                        }
+                        
+                    }
+
+                    else
+                    {
+                        transactions.ListAccount(input);
+                    }
+                }
+
+            } 
+        
         }
 
     }
 
-    internal class Account
+    class FileLoad
+    {
+        private string FileLocation;
+        private string[] FileLines;
+
+        FileLoad(string fileLocation)
+        {
+            FileLocation = fileLocation;
+            FileLines = System.IO.File.ReadAllLines(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
+        }
+
+        public TransactionLog GenerateTransactionLog()
+        {
+            TransactionLog transactions = new TransactionLog();
+            foreach (string line in FileLines.Skip(1))
+            {
+                var entries = line.Split(',');
+                DateTime date = DateTime.Parse(entries[0]);
+                double value = double.Parse(entries[4]);
+                transactions.AddTransaction(new Transaction(date, entries[1], entries[2], entries[3], value));
+            }
+
+            return transactions;
+        }
+    }
+    class Account
     {
         public string Name;
         public double Credit;
@@ -49,21 +91,14 @@ namespace SupportBank
             _transactionList = new List<Transaction>();
         }
 
-        public TransactionLog(List<Transaction> transactionList) => _transactionList = transactionList;
-
         public void AddTransaction(Transaction transaction) => _transactionList.Add(transaction);
 
-        public void ListAllTransactions()
-        {
-            foreach (Transaction transaction in _transactionList)
-            {
-                Console.WriteLine(transaction);
-            }
-        }
 
         public List<Account> CreateAccounts()
         {
             var accounts = new List<Account>();
+
+            // Go through the transaction list
             foreach (Transaction transaction in _transactionList)
             {
                 // Calculate credit deducted from senders
@@ -78,6 +113,7 @@ namespace SupportBank
                     }
                 }
 
+                // Create account with debited amount if account not found
                 if (!accountFound)
                 {
                     accounts.Add(new Account(transaction.From, -transaction.Amount));
@@ -95,6 +131,7 @@ namespace SupportBank
                     }
                 }
 
+                // Create account with credited amount if account not found
                 if (!accountFound)
                 {
                     accounts.Add(new Account(transaction.To, transaction.Amount));
