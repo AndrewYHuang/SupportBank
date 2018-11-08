@@ -14,6 +14,8 @@ namespace SupportBank
 {
     class Program
     {
+        public static List<Transaction> TransactionList;
+        public static List<Account> AccountList;
         static void Main(string[] args)
         {
             var config = new LoggingConfiguration();
@@ -24,44 +26,8 @@ namespace SupportBank
 
             var logger = NLog.LogManager.GetCurrentClassLogger();
             logger.Info("Program Started");
-            /*
-            var csvFile = new CsvFile(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
-            var transactions = csvFile.GenerateTransactionLog();
-            var accounts = AccountFactory.CreateAccounts(transactions);
-            */
-            var jsonFile = new JsonFile(@"C:\Users\AYH\Documents\Transactions2013.json");
-            var transactions = jsonFile.GenerateTransactionLog();
-            var accounts = AccountFactory.CreateAccounts(transactions);
-            
-            while (true)
-            {
-                var option = ConsoleInterface.UserMainPrompt(out var name);
-                switch (option)
-                {
-                    case 'f':
-                    {
-                        break;
-                    }
-                    case 'q':
-                        return;
-                    case 'l':
-                    {
-                        ConsoleInterface.ListAccounts(accounts);
-                        break;
-                    }
-                    case 'a':
-                    {
-                        ConsoleInterface.ListAccountTransactions(transactions, name);
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
-
-                }
-
-            } 
+           
+            ConsoleInterface.MainPrompt();
         
         }
 
@@ -97,7 +63,7 @@ namespace SupportBank
 
                 catch (System.FormatException e)
                 {
-                    logger.Error($"The line \" {line} \" is formatted badly: {e}");
+                    logger.Error($"The line \" {line} \" can't be parsed: {e}");
                     Console.WriteLine($"The line \"{line}\" is formatted badly, entry ignored");
                 }
             }
@@ -202,6 +168,7 @@ namespace SupportBank
             return accounts;
         }
     }
+
     static class ConsoleInterface
     {
         public static void ListAccounts(List<Account> accounts)
@@ -213,33 +180,90 @@ namespace SupportBank
         }
         public static void ListAccountTransactions(List<Transaction> transactionList,string name)
         {
+            var nameFound = false;
             foreach (Transaction transaction in transactionList)
-                if (transaction.FromAccount == name || transaction.ToAccount == name)
+                if (String.Equals(transaction.FromAccount, name, StringComparison.CurrentCultureIgnoreCase) 
+                    || String.Equals(transaction.ToAccount, name, StringComparison.CurrentCultureIgnoreCase))
+                {
                     Console.WriteLine(transaction);
-            
+                    nameFound = true;
+                }
+
+            if (!nameFound)
+            {
+                Console.WriteLine("Account not found");
+            }
+
         }
 
-        public static char UserMainPrompt(out string name)
+        public static string PromptCommand(out string arguments)
         {
             while (true)
             {
-                name = "";
-                string input = Console.ReadLine();
+                Console.WriteLine("Please enter a command:");
+                string[] input = Console.ReadLine().Split(new Char[]{' '}, 2, StringSplitOptions.None);
 
-                if (input == "q" || input == "quit" || input == "exit") return 'q';
-
-                if (input.StartsWith("list "))
-                {
-                    input = input.Remove(0, 5);
-
-                    if (input == "all") // "list all"
-                        return 'l';
-
-                    name = input; // otherwise it's "list [name]"
-                    return 'a';
-                }
+                arguments = input.Length == 1 ? String.Empty : input[1];
+ 
+                return input[0].ToLower();
             }
+        }
 
+        public static void MainPrompt()
+        {
+            while (true)
+            {
+                var option = ConsoleInterface.PromptCommand(out var argument);
+                switch (option)
+                {
+                    case "import":
+                    {
+                        if (argument.ToLower().StartsWith("file "))
+                        {
+                            argument = argument.Split(' ')[1];
+                            var filename = argument.Length == 1 ? String.Empty : argument;
+                            if (filename.EndsWith(".csv"))
+                            {
+                                var csvFile = new CsvFile(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
+                                var transactions = csvFile.GenerateTransactionLog();
+                                var accounts = AccountFactory.CreateAccounts(transactions);
+                            }
+                            else if (filename.EndsWith(".json"))
+                            {
+                                var jsonFile = new JsonFile(@"C:\Users\AYH\Documents\Transactions2013.json");
+                                Program.TransactionList = jsonFile.GenerateTransactionLog();
+                                Program.AccountList = AccountFactory.CreateAccounts(Program.TransactionList);
+                            }
+                            else
+                            {
+                                Console.WriteLine("File type not supported");
+                            }
+
+                        }
+                        break;
+                    }
+                    case "quit":
+                    case "q":
+                    case "exit":
+                        return;
+                    case "list":
+                    {
+                        if (argument == "all")
+                            ConsoleInterface.ListAccounts(Program.AccountList);
+                        else if (argument == String.Empty)
+                            Console.WriteLine("Please enter a name or \"all\" after list");
+                        else
+                            ConsoleInterface.ListAccountTransactions(Program.TransactionList, argument);
+                        break;
+                    }
+                    default:
+                    {
+                        break;
+                    }
+
+                }
+
+            }
         }
     }
 }
