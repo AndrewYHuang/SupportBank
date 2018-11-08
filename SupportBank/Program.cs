@@ -26,9 +26,61 @@ namespace SupportBank
 
             var logger = NLog.LogManager.GetCurrentClassLogger();
             logger.Info("Program Started");
-           
-            ConsoleInterface.MainPrompt();
-        
+
+            while (true)
+            {
+                var command = ConsoleInterface.PromptCommand(out var argument);
+                switch (command)
+                {
+                    case "import":
+                        {
+                            if (argument.ToLower().StartsWith("file "))
+                            {
+                                argument = argument.Split(' ')[1];
+                                var filename = argument.Length == 1 ? String.Empty : argument;
+                                if (filename.EndsWith(".csv"))
+                                {
+                                    var csvFile = new CsvFile(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
+                                    var transactions = csvFile.GenerateTransactionLog();
+                                    var accounts = Accountant.GenerateAccountsFromTransactions(transactions);
+                                }
+                                else if (filename.EndsWith(".json"))
+                                {
+                                    var jsonFile = new JsonFile(@"C:\Users\AYH\Documents\Transactions2013.json");
+                                    Program.TransactionList = jsonFile.GenerateTransactionLog();
+                                    Program.AccountList = Accountant.GenerateAccountsFromTransactions(Program.TransactionList);
+                                }
+                                else
+                                {
+                                    Console.WriteLine("File type not supported");
+                                }
+
+                            }
+                            break;
+                        }
+                    case "quit":
+                    case "q":
+                    case "exit":
+                        return;
+                    case "list":
+                        {
+                            if (argument == "all")
+                                ConsoleInterface.ListAccounts(Program.AccountList);
+                            else if (argument == String.Empty)
+                                Console.WriteLine("Please enter a name or \"all\" after list");
+                            else
+                                ConsoleInterface.ListAccountTransactions(Program.TransactionList, argument);
+                            break;
+                        }
+                    default:
+                        {
+                            break;
+                        }
+
+                }
+
+            }
+
         }
 
     }
@@ -70,7 +122,6 @@ namespace SupportBank
             return transactions;
         }
     }
-
     class JsonFile
     {
         private static readonly ILogger logger = NLog.LogManager.GetCurrentClassLogger();
@@ -120,17 +171,39 @@ namespace SupportBank
 
         public override string ToString() => $"{Date.ToShortDateString()}, {FromAccount}, {ToAccount}, {Narrative}, {Amount}";
     }
-    static class AccountFactory
+
+    public class AccountsDoNotExistException : Exception
     {
-        public static List<Account> CreateAccounts(IEnumerable<Transaction> transactionList)
+        public string[] accountNames;
+
+        public AccountsDoNotExistException(string message, string[] accountNames) : base(message)
+        {
+            this.accountNames = accountNames;
+        }
+    }
+    static class Accountant
+    {
+        private static List<Account> _accountList;
+        private static List<Transaction> _transactionList;
+
+        public static List<Account> GenerateAccountsFromTransactions(IEnumerable<Transaction> transactionList)
         {
             var accounts = new List<Account>();
-
-            // Go through the transaction list
+            
             foreach (Transaction transaction in transactionList)
             {
                 // Calculate credit deducted from senders
                 var accountFound = false;
+                try
+                {
+                    Accountant.ProcessTransaction(transaction);
+                }
+                catch (AccountsDoNotExistException e)
+                {
+                    foreach (var accountName in e.accountNames)
+                    Accountant.AddAccount(accountName);
+                }
+
                 foreach (Account account in accounts)
                 {
                     if (account.Name == transaction.FromAccount)
@@ -140,8 +213,10 @@ namespace SupportBank
                         break;
                     }
                 }
+                // accountfound = accountfactory.deductfees(accounts,transaction)
+                // if (!accountfound) 
+                //      account.add()
 
-                // Create account with debited amount if account not found
                 if (!accountFound)
                 {
                     accounts.Add(new Account(transaction.FromAccount, -transaction.Amount));
@@ -158,8 +233,7 @@ namespace SupportBank
                         break;
                     }
                 }
-
-                // Create account with credited amount if account not found
+                
                 if (!accountFound)
                 {
                     accounts.Add(new Account(transaction.ToAccount, transaction.Amount));
@@ -211,59 +285,7 @@ namespace SupportBank
 
         public static void MainPrompt()
         {
-            while (true)
-            {
-                var option = ConsoleInterface.PromptCommand(out var argument);
-                switch (option)
-                {
-                    case "import":
-                    {
-                        if (argument.ToLower().StartsWith("file "))
-                        {
-                            argument = argument.Split(' ')[1];
-                            var filename = argument.Length == 1 ? String.Empty : argument;
-                            if (filename.EndsWith(".csv"))
-                            {
-                                var csvFile = new CsvFile(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
-                                var transactions = csvFile.GenerateTransactionLog();
-                                var accounts = AccountFactory.CreateAccounts(transactions);
-                            }
-                            else if (filename.EndsWith(".json"))
-                            {
-                                var jsonFile = new JsonFile(@"C:\Users\AYH\Documents\Transactions2013.json");
-                                Program.TransactionList = jsonFile.GenerateTransactionLog();
-                                Program.AccountList = AccountFactory.CreateAccounts(Program.TransactionList);
-                            }
-                            else
-                            {
-                                Console.WriteLine("File type not supported");
-                            }
-
-                        }
-                        break;
-                    }
-                    case "quit":
-                    case "q":
-                    case "exit":
-                        return;
-                    case "list":
-                    {
-                        if (argument == "all")
-                            ConsoleInterface.ListAccounts(Program.AccountList);
-                        else if (argument == String.Empty)
-                            Console.WriteLine("Please enter a name or \"all\" after list");
-                        else
-                            ConsoleInterface.ListAccountTransactions(Program.TransactionList, argument);
-                        break;
-                    }
-                    default:
-                    {
-                        break;
-                    }
-
-                }
-
-            }
+            
         }
     }
 }
