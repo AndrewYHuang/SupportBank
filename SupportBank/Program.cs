@@ -8,6 +8,8 @@ using NLog;
 using NLog.Config;
 using NLog.Targets;
 
+using Newtonsoft.Json;
+
 namespace SupportBank
 {
     class Program
@@ -22,17 +24,24 @@ namespace SupportBank
 
             var logger = NLog.LogManager.GetCurrentClassLogger();
             logger.Info("Program Started");
-
-            FileLoad csvFile = new FileLoad(@"C:\Users\AYH\Documents\Transactions2014.csv");
+            /*
+            var csvFile = new CsvFile(@"C:\Users\AYH\Documents\DodgyTransactions2015.csv");
             var transactions = csvFile.GenerateTransactionLog();
             var accounts = AccountFactory.CreateAccounts(transactions);
-
+            */
+            var jsonFile = new JsonFile(@"C:\Users\AYH\Documents\Transactions2013.json");
+            var transactions = jsonFile.GenerateTransactionLog();
+            var accounts = AccountFactory.CreateAccounts(transactions);
             
             while (true)
             {
                 var option = ConsoleInterface.UserMainPrompt(out var name);
                 switch (option)
                 {
+                    case 'f':
+                    {
+                        break;
+                    }
                     case 'q':
                         return;
                     case 'l':
@@ -58,30 +67,59 @@ namespace SupportBank
 
     }
 
-    class FileLoad
+    class CsvFile
     {
-
+        private static readonly ILogger logger = NLog.LogManager.GetCurrentClassLogger();
         private string _fileLocation;
-        private string[] FileLines;
+        private string[] _fileLines;
 
-        public FileLoad(string fileLocation)
+        public CsvFile(string fileLocation)
         {
             _fileLocation = fileLocation;
-            FileLines = System.IO.File.ReadAllLines(fileLocation);
+            _fileLines = System.IO.File.ReadAllLines(_fileLocation);
         }
 
         public List<Transaction> GenerateTransactionLog()
         {
+            
             List<Transaction> transactions = new List<Transaction>();
-            foreach (string line in FileLines.Skip(1))
+            foreach (string line in _fileLines.Skip(1))
             {
-                var entries = line.Split(',');
-                DateTime date = DateTime.Parse(entries[0]);
-                double value = double.Parse(entries[4]);
-                transactions.Add(new Transaction(date, entries[1], entries[2], entries[3], value));
-            }
 
+                try
+                {
+                    var entries = line.Split(',');
+                    DateTime date = DateTime.Parse(entries[0]);
+                    double value = double.Parse(entries[4]);
+                    transactions.Add(new Transaction(date, entries[1], entries[2], entries[3], value));
+
+                }
+
+                catch (System.FormatException e)
+                {
+                    logger.Error($"The line \" {line} \" is formatted badly: {e}");
+                    Console.WriteLine($"The line \"{line}\" is formatted badly, entry ignored");
+                }
+            }
             return transactions;
+        }
+    }
+
+    class JsonFile
+    {
+        private static readonly ILogger logger = NLog.LogManager.GetCurrentClassLogger();
+        private string _fileLocation;
+        private string _fileSerialized;
+
+        public JsonFile(string fileLocation)
+        {
+            _fileLocation = fileLocation;
+            _fileSerialized = System.IO.File.ReadAllText(_fileLocation);
+        }
+
+        public List<Transaction> GenerateTransactionLog()
+        {
+            return JsonConvert.DeserializeObject<List<Transaction>>(_fileSerialized);
         }
     }
     class Account
@@ -100,21 +138,21 @@ namespace SupportBank
     class Transaction
     {
         public DateTime Date;
-        public string From;
-        public string To;
+        public string FromAccount;
+        public string ToAccount;
         public string Narrative;
         public double Amount;
 
-        public Transaction(DateTime date, string from, string to, string narrative, double amount)
+        public Transaction(DateTime date, string fromAccount, string toAccount, string narrative, double amount)
         {
             Date = date;
-            From = from;
-            To = to;
+            FromAccount = fromAccount;
+            ToAccount = toAccount;
             Narrative = narrative;
             Amount = amount;
         }
 
-        public override string ToString() => $"{Date.ToShortDateString()}, {From}, {To}, {Narrative}, {Amount}";
+        public override string ToString() => $"{Date.ToShortDateString()}, {FromAccount}, {ToAccount}, {Narrative}, {Amount}";
     }
     static class AccountFactory
     {
@@ -129,7 +167,7 @@ namespace SupportBank
                 var accountFound = false;
                 foreach (Account account in accounts)
                 {
-                    if (account.Name == transaction.From)
+                    if (account.Name == transaction.FromAccount)
                     {
                         account.Credit -= transaction.Amount;
                         accountFound = true;
@@ -140,14 +178,14 @@ namespace SupportBank
                 // Create account with debited amount if account not found
                 if (!accountFound)
                 {
-                    accounts.Add(new Account(transaction.From, -transaction.Amount));
+                    accounts.Add(new Account(transaction.FromAccount, -transaction.Amount));
                 }
 
                 // Calculate credit added to receivers
                 accountFound = false;
                 foreach (Account account in accounts)
                 {
-                    if (account.Name == transaction.To)
+                    if (account.Name == transaction.ToAccount)
                     {
                         account.Credit += transaction.Amount;
                         accountFound = true;
@@ -158,7 +196,7 @@ namespace SupportBank
                 // Create account with credited amount if account not found
                 if (!accountFound)
                 {
-                    accounts.Add(new Account(transaction.To, transaction.Amount));
+                    accounts.Add(new Account(transaction.ToAccount, transaction.Amount));
                 }
             }
             return accounts;
@@ -176,7 +214,7 @@ namespace SupportBank
         public static void ListAccountTransactions(List<Transaction> transactionList,string name)
         {
             foreach (Transaction transaction in transactionList)
-                if (transaction.From == name || transaction.To == name)
+                if (transaction.FromAccount == name || transaction.ToAccount == name)
                     Console.WriteLine(transaction);
             
         }
